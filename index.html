@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>太空飞机大战</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas" width="800" height="600"></canvas>
+    
+    <!-- 游戏界面 -->
+    <div id="game-ui">
+      <div id="score">得分: <span id="score-value">0</span></div>
+      <div id="lives">生命: <span id="lives-value">3</span></div>
+    </div>
+    
+    <!-- 开始界面 -->
+    <div id="start-screen" class="screen">
+      <h1>太空飞机大战</h1>
+      <p>使用WASD键控制飞机移动</p>
+      <p>游戏会自动发射子弹</p>
+      <button id="start-btn">开始游戏</button>
+    </div>
+    
+    <!-- 暂停界面 -->
+    <div id="pause-screen" class="screen hidden">
+      <h1>游戏暂停</h1>
+      <button id="resume-btn">继续游戏</button>
+    </div>
+    
+    <!-- 游戏结束界面 -->
+    <div id="game-over-screen" class="screen hidden">
+      <h1>游戏结束</h1>
+      <p>最终得分: <span id="final-score">0</span></p>
+      <button id="restart-btn">重新开始</button>
+    </div>
+  </div>
+  
+  <script src="script.js"></script>
+</body>
+</html>
