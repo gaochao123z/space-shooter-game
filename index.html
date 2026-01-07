@@ -12,7 +12,9 @@
     <!-- 游戏界面 -->
     <div id="game-ui">
       <div id="score">得分: <span id="score-value">0</span></div>
-      <div id="lives">生命: <span id="lives-value">3</span></div>
+      <div id="lives">生命: <span id="lives-value">100</span></div>
+      <div id="weapon-level">武器: <span id="weapon-level-value">1</span></div>
+      <div id="weapon-timer">武器时间: <span id="weapon-timer-value">0</span></div>
     </div>
     
     <!-- 开始界面 -->
@@ -37,6 +39,11 @@
     </div>
   </div>
   
+  <!-- 音频元素 - 使用Web Audio API生成音效 -->
+  <audio id="bgm" loop>
+    <source src="https://assets.mixkit.co/music/preview/mixkit-space-battle-701.mp3" type="audio/mpeg">
+  </audio>
+
   <script src="script.js"></script>
 </body>
 </html>

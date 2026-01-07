@@ -3,14 +3,24 @@ let canvas, ctx;
 let player;
 let bullets = [];
 let enemies = [];
+let powerUps = []; // 奖励物品数组
 let stars = [];
 let score = 0;
-let lives = 3;
+let lives = 100; // 改为100点生命值
 let gameRunning = false;
 let gamePaused = false;
 let lastTime = 0;
 let enemySpawnTimer = 0;
 let bulletSpawnTimer = 0;
+let powerUpSpawnTimer = 0; // 奖励生成计时器
+
+// 玩家状态
+let weaponLevel = 1; // 武器等级，1为单发，2为双发，3为扇形
+let weaponDuration = 0; // 武器效果持续时间
+let maxWeaponDuration = 300; // 武器效果最大持续时间(帧)
+let powerUpEffectTimer = 0; // 奖励效果计时器
+let powerUpEffectType = null; // 当前奖励效果类型
+let playerHitFlash = 0; // 玩家被击中闪烁计时器
 
 // 键盘状态
 const keys = {
@@ -29,24 +39,37 @@ class Player {
     this.y = canvas.height - this.height - 20;
     this.speed = 5;
     this.color = '#4fc3f7';
+    this.originalColor = '#4fc3f7';
   }
 
   draw() {
+    // 根据奖励效果调整颜色
+    if (powerUpEffectTimer > 0 && powerUpEffectType) {
+      if (powerUpEffectType === 'health') {
+        ctx.fillStyle = '#4caf50'; // 绿色表示治疗效果
+      } else if (powerUpEffectType === 'weapon') {
+        ctx.fillStyle = '#ff9800'; // 橙色表示武器效果
+      }
+    } else if (playerHitFlash > 0 && playerHitFlash % 6 < 3) { // 闪烁效果，每6帧闪烁3帧
+      ctx.fillStyle = '#ff5252'; // 红色表示受伤
+    } else {
+      ctx.fillStyle = this.color;
+    }
+
     // 绘制飞船主体
-    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.moveTo(this.x + this.width / 2, this.y);
     ctx.lineTo(this.x + this.width, this.y + this.height);
     ctx.lineTo(this.x, this.y + this.height);
     ctx.closePath();
     ctx.fill();
-    
+
     // 绘制驾驶舱
     ctx.fillStyle = '#e3f2fd';
     ctx.beginPath();
     ctx.arc(this.x + this.width / 2, this.y + 15, 8, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // 绘制引擎火焰
     if (keys.w || keys.a || keys.s || keys.d) {
       ctx.fillStyle = '#ff9800';
@@ -69,27 +92,30 @@ class Player {
 }
 
 class Bullet {
-  constructor(x, y) {
+  constructor(x, y, angle = 0) {
     this.width = 4;
     this.height = 15;
     this.x = x;
     this.y = y;
     this.speed = 8;
     this.color = '#ffeb3b';
+    this.angle = angle; // 子弹飞行角度
   }
 
   draw() {
     ctx.fillStyle = this.color;
     ctx.fillRect(this.x, this.y, this.width, this.height);
-    
+
     // 添加子弹发光效果
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(this.x + 1, this.y + 2, 2, 4);
   }
 
   update() {
-    this.y -= this.speed;
-    return this.y > -this.height; // 如果子弹超出屏幕上方则返回false
+    // 根据角度更新位置
+    this.y -= this.speed * Math.cos(this.angle);
+    this.x += this.speed * Math.sin(this.angle);
+    return this.y > -this.height && this.x > -this.width && this.x < canvas.width; // 如果子弹超出屏幕边界则返回false
   }
 }
 
@@ -146,22 +172,199 @@ class Enemy {
   }
 }
 
+class PowerUp {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type; // 'health' 或 'weapon'
+    this.width = 30;
+    this.height = 30;
+    this.speed = 2;
+    this.color = type === 'health' ? '#4caf50' : '#ff9800'; // 绿色为治疗，橙色为武器
+    this.pulse = 0; // 用于脉冲动画
+  }
+
+  draw() {
+    this.pulse = (this.pulse + 0.05) % (2 * Math.PI); // 脉冲动画
+    const pulseSize = Math.sin(this.pulse) * 2;
+
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+
+    if (this.type === 'health') {
+      // 绘制治疗药水（十字形）
+      ctx.fillRect(
+        this.x + this.width/2 - 3 + pulseSize/2,
+        this.y + pulseSize,
+        6,
+        this.height - pulseSize*2
+      );
+      ctx.fillRect(
+        this.x + pulseSize,
+        this.y + this.height/2 - 3 + pulseSize/2,
+        this.width - pulseSize*2,
+        6
+      );
+    } else {
+      // 绘制武器升级（星形）
+      const centerX = this.x + this.width / 2;
+      const centerY = this.y + this.height / 2;
+      const spikes = 5;
+      const outerRadius = 15 + pulseSize;
+      const innerRadius = 8;
+
+      let rotation = Math.PI / 2;
+      let x = centerX;
+      let y = centerY;
+      ctx.moveTo(x, y - outerRadius);
+
+      for (let i = 0; i < spikes; i++) {
+        x = centerX + Math.cos(rotation) * outerRadius;
+        y = centerY + Math.sin(rotation) * outerRadius;
+        ctx.lineTo(x, y);
+        rotation += Math.PI / spikes;
+
+        x = centerX + Math.cos(rotation) * innerRadius;
+        y = centerY + Math.sin(rotation) * innerRadius;
+        ctx.lineTo(x, y);
+        rotation += Math.PI / spikes;
+      }
+
+      ctx.lineTo(centerX, centerY - outerRadius);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  update() {
+    this.y += this.speed;
+    return this.y < canvas.height; // 如果奖励超出屏幕下方则返回false
+  }
+}
+
+// Web Audio API 音效生成
+let audioContext;
+
+function initAudio() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playTone(frequency, duration, type = 'square', volume = 0.1) {
+  if (!audioContext) {
+    initAudio();
+  }
+
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.frequency.value = frequency;
+  oscillator.type = type;
+
+  gainNode.gain.value = volume;
+
+  const now = audioContext.currentTime;
+  oscillator.start(now);
+  oscillator.stop(now + duration / 1000); // 转换为秒
+
+  // 释放资源
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    gainNode.disconnect();
+  };
+}
+
+// 音频播放函数
+function playSound(soundId) {
+  // 使用Web Audio API生成音效
+  switch(soundId) {
+    case 'shoot-sound':
+      // 射击音效 - 短促的高频音
+      playTone(800, 50, 'square', 0.05);
+      break;
+    case 'hit-sound':
+      // 受伤音效 - 低频短促音
+      playTone(200, 200, 'sawtooth', 0.1);
+      break;
+    case 'powerup-sound':
+      // 奖励音效 - 上升音调
+      playTone(400, 100, 'sine', 0.08);
+      setTimeout(() => playTone(500, 100, 'sine', 0.08), 100);
+      setTimeout(() => playTone(600, 100, 'sine', 0.08), 200);
+      break;
+    case 'explosion-sound':
+      // 爆炸音效 - 噪音效果
+      playNoise(300, 300);
+      break;
+    case 'bgm':
+      // 如果需要播放背景音乐，仍可使用原始方式
+      const bgm = document.getElementById('bgm');
+      if (bgm) {
+        bgm.currentTime = 0;
+        bgm.play().catch(e => console.log("背景音乐播放失败:", e));
+      }
+      break;
+  }
+}
+
+// 播放噪音效果（用于爆炸声）
+function playNoise(frequency, duration) {
+  if (!audioContext) {
+    initAudio();
+  }
+
+  const bufferSize = audioContext.sampleRate * (duration / 1000);
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1; // 随机噪声
+  }
+
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+
+  const filter = audioContext.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = frequency;
+
+  const gainNode = audioContext.createGain();
+  gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + (duration / 1000));
+
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  source.start();
+  source.stop(audioContext.currentTime + (duration / 1000));
+}
+
 // 初始化游戏
 function init() {
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
-  
+
   // 创建星空背景
   createStars();
-  
+
   // 初始化玩家
   player = new Player();
-  
+
   // 绑定事件监听器
   bindEventListeners();
-  
+
   // 启动游戏循环
   requestAnimationFrame(gameLoop);
+}
+
+// 生成奖励物品
+function spawnPowerUp(x, y, type) {
+  powerUps.push(new PowerUp(x, y, type));
 }
 
 // 创建星空背景
@@ -196,16 +399,20 @@ function bindEventListeners() {
     if (e.key === 's' || e.key === 'S') keys.s = true;
     if (e.key === 'd' || e.key === 'D') keys.d = true;
   });
-  
+
   document.addEventListener('keyup', (e) => {
     if (e.key === 'w' || e.key === 'W') keys.w = false;
     if (e.key === 'a' || e.key === 'A') keys.a = false;
     if (e.key === 's' || e.key === 'S') keys.s = false;
     if (e.key === 'd' || e.key === 'D') keys.d = false;
   });
-  
+
   // 按钮事件
-  document.getElementById('start-btn').addEventListener('click', startGame);
+  document.getElementById('start-btn').addEventListener('click', () => {
+    // 在用户交互后初始化音频上下文（解决浏览器自动播放策略）
+    initAudio();
+    startGame();
+  });
   document.getElementById('resume-btn').addEventListener('click', resumeGame);
   document.getElementById('restart-btn').addEventListener('click', restartGame);
 }
@@ -215,13 +422,22 @@ function startGame() {
   gameRunning = true;
   gamePaused = false;
   score = 0;
-  lives = 3;
+  lives = 100; // 初始生命值为100
   bullets = [];
   enemies = [];
+  powerUps = []; // 重置奖励物品数组
+  weaponLevel = 1; // 重置武器等级
+  weaponDuration = 0; // 重置武器持续时间
+  powerUpEffectTimer = 0; // 重置奖励效果计时器
+  powerUpEffectType = null; // 重置奖励效果类型
+  playerHitFlash = 0; // 重置玩家被击中闪烁计时器
   updateScore();
   document.getElementById('start-screen').classList.add('hidden');
   document.getElementById('pause-screen').classList.add('hidden');
   document.getElementById('game-over-screen').classList.add('hidden');
+
+  // 播放背景音乐
+  playSound('bgm');
 }
 
 // 暂停游戏
@@ -241,19 +457,30 @@ function restartGame() {
   gameRunning = true;
   gamePaused = false;
   score = 0;
-  lives = 3;
+  lives = 100; // 初始生命值为100
   bullets = [];
   enemies = [];
+  powerUps = []; // 重置奖励物品数组
   player = new Player();
+  weaponLevel = 1; // 重置武器等级
+  weaponDuration = 0; // 重置武器持续时间
+  powerUpEffectTimer = 0; // 重置奖励效果计时器
+  powerUpEffectType = null; // 重置奖励效果类型
+  playerHitFlash = 0; // 重置玩家被击中闪烁计时器
   updateScore();
   document.getElementById('game-over-screen').classList.add('hidden');
   document.getElementById('pause-screen').classList.add('hidden');
+
+  // 重新播放背景音乐
+  playSound('bgm');
 }
 
 // 更新分数显示
 function updateScore() {
   document.getElementById('score-value').textContent = score;
   document.getElementById('lives-value').textContent = lives;
+  document.getElementById('weapon-level-value').textContent = weaponLevel;
+  document.getElementById('weapon-timer-value').textContent = Math.ceil(weaponDuration / 60); // 显示秒数
 }
 
 // 游戏主循环
@@ -261,24 +488,54 @@ function gameLoop(timestamp) {
   if (!lastTime) lastTime = timestamp;
   const deltaTime = timestamp - lastTime;
   lastTime = timestamp;
-  
+
   if (gameRunning && !gamePaused) {
     // 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+
     // 绘制星空背景
     drawStars();
-    
+
     // 更新和绘制玩家
     player.update();
     player.draw();
-    
-    // 自动发射子弹
+
+    // 自动发射子弹（根据武器等级）
     if (timestamp - bulletSpawnTimer > 200) { // 每200ms发射一次子弹
-      bullets.push(new Bullet(player.x + player.width / 2 - 2, player.y));
+      if (weaponLevel === 1) {
+        // 单发子弹
+        bullets.push(new Bullet(player.x + player.width / 2 - 2, player.y));
+        playSound('shoot-sound'); // 播放射击音效
+      } else if (weaponLevel === 2) {
+        // 双发子弹
+        bullets.push(new Bullet(player.x + player.width / 4 - 2, player.y));
+        bullets.push(new Bullet(player.x + 3 * player.width / 4 - 2, player.y));
+        playSound('shoot-sound'); // 播放射击音效
+      } else if (weaponLevel === 3) {
+        // 扇形三发子弹 - 中间垂直，两边有角度
+        bullets.push(new Bullet(player.x + player.width / 2 - 2, player.y, 0)); // 中间子弹
+        bullets.push(new Bullet(player.x + player.width / 4 - 2, player.y, -0.3)); // 左子弹
+        bullets.push(new Bullet(player.x + 3 * player.width / 4 - 2, player.y, 0.3)); // 右子弹
+        playSound('shoot-sound'); // 播放射击音效
+      } else if (weaponLevel === 4) {
+        // 四发子弹 - 两边再加两发
+        bullets.push(new Bullet(player.x + player.width / 2 - 6, player.y));
+        bullets.push(new Bullet(player.x + player.width / 2 + 2, player.y));
+        bullets.push(new Bullet(player.x + player.width / 4 - 2, player.y, -0.3));
+        bullets.push(new Bullet(player.x + 3 * player.width / 4 - 2, player.y, 0.3));
+        playSound('shoot-sound'); // 播放射击音效
+      } else if (weaponLevel >= 5) {
+        // 五发扇形子弹 - 更广的扇形
+        bullets.push(new Bullet(player.x + player.width / 2 - 2, player.y, 0)); // 中间
+        bullets.push(new Bullet(player.x + player.width / 3 - 4, player.y, -0.2)); // 左1
+        bullets.push(new Bullet(player.x + 2 * player.width / 3, player.y, 0.2)); // 右1
+        bullets.push(new Bullet(player.x + player.width / 4 - 6, player.y, -0.4)); // 左2
+        bullets.push(new Bullet(player.x + 3 * player.width / 4 + 2, player.y, 0.4)); // 右2
+        playSound('shoot-sound'); // 播放射击音效
+      }
       bulletSpawnTimer = timestamp;
     }
-    
+
     // 更新和绘制子弹
     for (let i = bullets.length - 1; i >= 0; i--) {
       if (!bullets[i].update()) {
@@ -287,14 +544,15 @@ function gameLoop(timestamp) {
         bullets[i].draw();
       }
     }
-    
-    // 生成敌人
-    if (timestamp - enemySpawnTimer > 1000) { // 每1000ms生成一个敌人
-      const enemyType = Math.random() > 0.5 ? 'plane' : 'asteroid';
+
+    // 生成敌人 - 随着分数增加，生成频率提高
+    const baseSpawnRate = Math.max(300, 1000 - Math.floor(score / 10)); // 最快300ms生成一个
+    if (timestamp - enemySpawnTimer > baseSpawnRate) {
+      const enemyType = Math.random() > 0.7 ? 'plane' : 'asteroid'; // 增加飞机比例到30%
       enemies.push(new Enemy(enemyType));
       enemySpawnTimer = timestamp;
     }
-    
+
     // 更新和绘制敌人
     for (let i = enemies.length - 1; i >= 0; i--) {
       if (!enemies[i].update()) {
@@ -303,11 +561,42 @@ function gameLoop(timestamp) {
         enemies[i].draw();
       }
     }
-    
+
+    // 生成奖励物品（击杀敌人后随机生成）
     // 检测碰撞
     checkCollisions();
+
+    // 更新和绘制奖励物品
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+      if (!powerUps[i].update()) {
+        powerUps.splice(i, 1);
+      } else {
+        powerUps[i].draw();
+      }
+    }
+
+    // 更新武器效果持续时间
+    if (weaponDuration > 0) {
+      weaponDuration--;
+      if (weaponDuration === 0) {
+        weaponLevel = 1; // 恢复普通武器
+      }
+    }
+
+    // 更新奖励效果计时器
+    if (powerUpEffectTimer > 0) {
+      powerUpEffectTimer--;
+      if (powerUpEffectTimer === 0) {
+        powerUpEffectType = null; // 清除效果类型
+      }
+    }
+
+    // 更新玩家被击中闪烁计时器
+    if (playerHitFlash > 0) {
+      playerHitFlash--;
+    }
   }
-  
+
   requestAnimationFrame(gameLoop);
 }
 
@@ -324,14 +613,34 @@ function checkCollisions() {
       ) {
         // 碰撞发生
         bullets.splice(i, 1);
+        const enemy = enemies[j];
+        const points = enemy.type === 'plane' ? 10 : 5; // 飞机10分，陨石5分
+        score += points;
         enemies.splice(j, 1);
-        score += enemies[j].type === 'plane' ? 10 : 5; // 飞机10分，陨石5分
         updateScore();
+
+        // 随机生成奖励物品（30%概率）
+        if (Math.random() < 0.3) {
+          // 根据敌人类型决定奖励类型
+          let powerUpType;
+          if (enemy.type === 'plane') {
+            // 飞机敌人更可能掉落武器
+            powerUpType = Math.random() < 0.8 ? 'weapon' : 'health'; // 80%武器，20%治疗
+          } else {
+            // 陨石敌人更可能掉落治疗
+            powerUpType = Math.random() < 0.7 ? 'health' : 'weapon'; // 70%治疗，30%武器
+          }
+          spawnPowerUp(enemy.x + enemy.width / 2 - 15, enemy.y + enemy.height / 2 - 15, powerUpType);
+        }
+
+        // 播放爆炸音效
+        playSound('explosion-sound');
+
         break;
       }
     }
   }
-  
+
   // 玩家与敌人的碰撞
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (
@@ -340,14 +649,57 @@ function checkCollisions() {
       player.y < enemies[i].y + enemies[i].height &&
       player.y + player.height > enemies[i].y
     ) {
-      // 碰撞发生
-      enemies.splice(i, 1);
-      lives--;
+      // 碰撞发生 - 击中我方，扣除生命值
+      const damage = enemies[i].type === 'plane' ? 15 : 10; // 飞机敌人造成15点伤害，陨石造成10点伤害
+      lives -= damage;
+      enemies.splice(i, 1); // 移除碰撞的敌人
       updateScore();
-      
+
+      // 设置闪烁效果
+      playerHitFlash = 30; // 闪烁半秒(以60fps计算)
+
+      // 播放受伤音效
+      playSound('hit-sound');
+
       if (lives <= 0) {
+        lives = 0; // 确保生命值不为负数
         gameOver();
       }
+    }
+  }
+
+  // 玩家与奖励物品的碰撞
+  for (let i = powerUps.length - 1; i >= 0; i--) {
+    if (
+      player.x < powerUps[i].x + powerUps[i].width &&
+      player.x + player.width > powerUps[i].x &&
+      player.y < powerUps[i].y + powerUps[i].height &&
+      player.y + player.height > powerUps[i].y
+    ) {
+      // 拾取奖励
+      if (powerUps[i].type === 'health') {
+        // 治疗奖励：增加生命值，最多100点
+        if (lives < 100) {
+          lives = Math.min(lives + 25, 100); // 治疗奖励增加25点生命值
+          updateScore();
+        }
+        // 添加拾取治疗的视觉反馈
+        powerUpEffectType = 'health';
+        powerUpEffectTimer = 30; // 0.5秒(以60fps计算)
+        // 播放拾取治疗音效
+        playSound('powerup-sound');
+      } else if (powerUps[i].type === 'weapon') {
+        // 武器升级
+        weaponLevel = Math.min(weaponLevel + 1, 5); // 最大武器等级为5
+        weaponDuration = maxWeaponDuration; // 重置武器持续时间
+        // 添加拾取武器的视觉反馈
+        powerUpEffectType = 'weapon';
+        powerUpEffectTimer = 30; // 0.5秒(以60fps计算)
+        // 播放拾取武器音效
+        playSound('powerup-sound');
+      }
+
+      powerUps.splice(i, 1); // 移除已拾取的奖励
     }
   }
 }
@@ -357,6 +709,11 @@ function gameOver() {
   gameRunning = false;
   document.getElementById('final-score').textContent = score;
   document.getElementById('game-over-screen').classList.remove('hidden');
+
+  // 停止背景音乐
+  const bgm = document.getElementById('bgm');
+  bgm.pause();
+  bgm.currentTime = 0;
 }
 
 // 初始化游戏

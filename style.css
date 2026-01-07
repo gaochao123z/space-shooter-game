@@ -42,8 +42,9 @@ body {
   text-shadow: 0 0 5px #00f, 0 0 10px #00f;
 }
 
-#score, #lives {
+#score, #lives, #weapon-level, #weapon-timer {
   margin-bottom: 10px;
+  text-shadow: 0 0 5px #00f, 0 0 10px #00f;
 }
 
 /* 屏幕覆盖层 */
