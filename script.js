@@ -301,12 +301,8 @@ function playSound(soundId) {
       playNoise(300, 300);
       break;
     case 'bgm':
-      // 如果需要播放背景音乐，仍可使用原始方式
-      const bgm = document.getElementById('bgm');
-      if (bgm) {
-        bgm.currentTime = 0;
-        bgm.play().catch(e => console.log("背景音乐播放失败:", e));
-      }
+      // 使用Web Audio API生成背景音乐
+      playBackgroundMusic();
       break;
   }
 }
@@ -342,6 +338,79 @@ function playNoise(frequency, duration) {
 
   source.start();
   source.stop(audioContext.currentTime + (duration / 1000));
+}
+
+// 播放背景音乐
+let bgmSource = null;
+let bgmGainNode = null;
+
+function playBackgroundMusic() {
+  if (!audioContext) {
+    initAudio();
+  }
+
+  // 如果已经有背景音乐在播放，先停止它
+  if (bgmSource) {
+    bgmSource.stop();
+    bgmSource = null;
+  }
+
+  // 创建一个简单的循环背景音乐
+  const now = audioContext.currentTime;
+  const noteDuration = 0.5; // 每个音符持续0.5秒
+
+  // 创建增益节点用于控制音量
+  bgmGainNode = audioContext.createGain();
+  bgmGainNode.gain.value = 0.1; // 背景音乐音量较低
+  bgmGainNode.connect(audioContext.destination);
+
+  // 播放一个简单的循环旋律
+  const baseFreq = 110; // A1
+  const melody = [baseFreq, baseFreq * 1.2, baseFreq * 1.5, baseFreq * 1.4, baseFreq * 1.2, baseFreq * 1.0, baseFreq * 0.8, baseFreq * 1.1];
+
+  // 循环播放旋律
+  playMelody(melody, now, noteDuration);
+}
+
+function playMelody(notes, startTime, noteDuration) {
+  if (!audioContext) return;
+
+  let time = startTime;
+
+  // 重复播放旋律
+  for (let i = 0; i < notes.length; i++) {
+    playNote(notes[i], time + i * noteDuration, noteDuration * 0.8);
+  }
+
+  // 计划下一轮播放
+  const nextStartTime = startTime + notes.length * noteDuration;
+  setTimeout(() => {
+    if (bgmSource) { // 检查是否仍在播放
+      playMelody(notes, nextStartTime, noteDuration);
+    }
+  }, notes.length * noteDuration * 1000);
+}
+
+function playNote(frequency, startTime, duration) {
+  if (!audioContext) return;
+
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(bgmGainNode);
+
+  oscillator.type = 'sine';
+  oscillator.frequency.value = frequency;
+
+  // 使用包络来平滑音符的开始和结束
+  gainNode.gain.setValueAtTime(0, startTime);
+  gainNode.gain.linearRampToValueAtTime(0.1, startTime + 0.01); // 快速上升
+  gainNode.gain.linearRampToValueAtTime(0.05, startTime + duration - 0.05); // 主要音量
+  gainNode.gain.linearRampToValueAtTime(0, startTime + duration); // 平滑结束
+
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration);
 }
 
 // 初始化游戏
@@ -444,12 +513,25 @@ function startGame() {
 function pauseGame() {
   gamePaused = true;
   document.getElementById('pause-screen').classList.remove('hidden');
+
+  // 暂停背景音乐
+  if (bgmSource) {
+    bgmSource.stop();
+    bgmSource = null;
+  }
+  if (bgmGainNode) {
+    bgmGainNode.disconnect();
+    bgmGainNode = null;
+  }
 }
 
 // 继续游戏
 function resumeGame() {
   gamePaused = false;
   document.getElementById('pause-screen').classList.add('hidden');
+
+  // 重新播放背景音乐
+  playSound('bgm');
 }
 
 // 重新开始游戏
@@ -470,6 +552,16 @@ function restartGame() {
   updateScore();
   document.getElementById('game-over-screen').classList.add('hidden');
   document.getElementById('pause-screen').classList.add('hidden');
+
+  // 停止之前的背景音乐
+  if (bgmSource) {
+    bgmSource.stop();
+    bgmSource = null;
+  }
+  if (bgmGainNode) {
+    bgmGainNode.disconnect();
+    bgmGainNode = null;
+  }
 
   // 重新播放背景音乐
   playSound('bgm');
@@ -711,9 +803,14 @@ function gameOver() {
   document.getElementById('game-over-screen').classList.remove('hidden');
 
   // 停止背景音乐
-  const bgm = document.getElementById('bgm');
-  bgm.pause();
-  bgm.currentTime = 0;
+  if (bgmSource) {
+    bgmSource.stop();
+    bgmSource = null;
+  }
+  if (bgmGainNode) {
+    bgmGainNode.disconnect();
+    bgmGainNode = null;
+  }
 }
 
 // 初始化游戏
