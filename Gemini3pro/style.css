@@ -1,0 +1,133 @@
+/* 基础重置 */
+body,
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    touch-action: none;
+    /* 禁止移动端默认触摸行为 */
+}
+
+#game-stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+canvas {
+    display: block;
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
+}
+
+/* UI 层 */
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 15px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    /* 让点击穿透到 Canvas */
+    color: #fff;
+    text-shadow: 0 0 5px #00d2ff;
+}
+
+.stat-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+.hp-bar-bg {
+    width: 150px;
+    height: 15px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid #fff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#hp-bar-fill {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff4757, #ff6b81);
+    transition: width 0.2s;
+}
+
+/* 覆盖层 (开始/结束) */
+.overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.85);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    border: 2px solid #00d2ff;
+    box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+    color: white;
+    z-index: 10;
+}
+
+.hidden {
+    display: none !important;
+}
+
+h1 {
+    margin-top: 0;
+    color: #00d2ff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.controls-hint {
+    margin: 20px 0;
+    color: #aaa;
+    font-size: 14px;
+}
+
+button {
+    background: #00d2ff;
+    color: #000;
+    border: none;
+    padding: 12px 30px;
+    font-size: 18px;
+    border-radius: 30px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 0.1s, background 0.2s;
+}
+
+button:hover {
+    background: #fff;
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 600px) {
+    .hp-bar-bg {
+        width: 100px;
+    }
+
+    .stat-box {
+        font-size: 14px;
+    }
+
+    .overlay {
+        width: 80%;
+        padding: 20px;
+    }
+}
