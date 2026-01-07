@@ -30,10 +30,16 @@ const keys = {
   d: false
 };
 
-// 触摸控制状态
-let touchStartX = 0;
-let touchStartY = 0;
-let isTouching = false;
+// 虚拟摇杆状态
+let virtualJoystick = {
+  active: false,
+  baseX: 0,
+  baseY: 0,
+  stickX: 0,
+  stickY: 0,
+  radius: 50,
+  maxDistance: 50
+};
 
 // 游戏元素类
 class Player {
@@ -76,7 +82,7 @@ class Player {
     ctx.fill();
 
     // 绘制引擎火焰
-    if (keys.w || keys.a || keys.s || keys.d || isTouching) {
+    if (keys.w || keys.a || keys.s || keys.d || virtualJoystick.active) {
       ctx.fillStyle = '#ff9800';
       ctx.beginPath();
       ctx.moveTo(this.x + this.width / 2 - 5, this.y + this.height);
@@ -86,33 +92,19 @@ class Player {
       ctx.fill();
     }
 
-    // 如果是触摸模式且正在触摸，则绘制触摸目标指示器
-    if (isTouching) {
-      const rect = canvas.getBoundingClientRect();
-      const touchX = touchStartX - rect.left;
-      const touchY = touchStartY - rect.top;
-
-      // 绘制目标圆圈
+    // 绘制虚拟摇杆
+    if (virtualJoystick.active) {
+      // 绘制摇杆底座
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(touchX, touchY, 20, 0, Math.PI * 2);
+      ctx.arc(virtualJoystick.baseX, virtualJoystick.baseY, virtualJoystick.radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // 绘制连接线
-      const playerCenterX = this.x + this.width / 2;
-      const playerCenterY = this.y + this.height / 2;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
+      // 绘制摇杆杆
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
       ctx.beginPath();
-      ctx.moveTo(playerCenterX, playerCenterY);
-      ctx.lineTo(touchX, touchY);
-      ctx.stroke();
-
-      // 绘制触摸点指示器
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.beginPath();
-      ctx.arc(touchX, touchY, 10, 0, Math.PI * 2);
+      ctx.arc(virtualJoystick.stickX, virtualJoystick.stickY, virtualJoystick.radius / 2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -124,20 +116,25 @@ class Player {
     if (keys.w && this.y > 0) this.y -= this.speed;
     if (keys.s && this.y < canvas.height - this.height) this.y += this.speed;
 
-    // 触摸移动控制 - 直接移动到触摸位置
-    if (isTouching && player) {
-      // 获取触摸相对于画布的位置
-      const rect = canvas.getBoundingClientRect();
-      const touchX = touchStartX - rect.left;
-      const touchY = touchStartY - rect.top;
+    // 虚拟摇杆控制
+    if (virtualJoystick.active) {
+      // 计算摇杆方向和距离
+      const dx = virtualJoystick.stickX - virtualJoystick.baseX;
+      const dy = virtualJoystick.stickY - virtualJoystick.baseY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // 计算玩家应处的位置（使飞机中心对齐触摸点）
-      this.x = touchX - this.width / 2;
-      this.y = touchY - this.height / 2;
+      // 根据摇杆偏移量移动玩家
+      if (distance > 0) {
+        const moveX = (dx / distance) * Math.min(distance, virtualJoystick.maxDistance) * (this.speed / virtualJoystick.maxDistance);
+        const moveY = (dy / distance) * Math.min(distance, virtualJoystick.maxDistance) * (this.speed / virtualJoystick.maxDistance);
 
-      // 边界检查
-      this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
-      this.y = Math.max(0, Math.min(canvas.height - this.height, this.y));
+        this.x += moveX;
+        this.y += moveY;
+
+        // 边界检查
+        this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+        this.y = Math.max(0, Math.min(canvas.height - this.height, this.y));
+      }
     }
   }
 }
@@ -554,24 +551,52 @@ function bindEventListeners() {
 function handleTouchStart(e) {
   e.preventDefault();
   const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-  isTouching = true;
+  const rect = canvas.getBoundingClientRect();
+  const touchX = touch.clientX - rect.left;
+  const touchY = touch.clientY - rect.top;
+
+  // 检查触摸是否在左半边屏幕（控制区域）
+  if (touchX < canvas.width / 2) {
+    // 初始化虚拟摇杆
+    virtualJoystick.active = true;
+    virtualJoystick.baseX = touchX;
+    virtualJoystick.baseY = touchY;
+    virtualJoystick.stickX = touchX;
+    virtualJoystick.stickY = touchY;
+  }
 }
 
 // 触摸移动事件
 function handleTouchMove(e) {
   e.preventDefault();
-  const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-  // 不需要设置isTouching=true，因为它已经在触摸中
+  if (virtualJoystick.active) {
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    // 计算摇杆偏移
+    const dx = touchX - virtualJoystick.baseX;
+    const dy = touchY - virtualJoystick.baseY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= virtualJoystick.radius) {
+      // 摇杆在范围内，直接设置位置
+      virtualJoystick.stickX = touchX;
+      virtualJoystick.stickY = touchY;
+    } else {
+      // 摇杆超出范围，限制在范围内
+      const angle = Math.atan2(dy, dx);
+      virtualJoystick.stickX = virtualJoystick.baseX + Math.cos(angle) * virtualJoystick.radius;
+      virtualJoystick.stickY = virtualJoystick.baseY + Math.sin(angle) * virtualJoystick.radius;
+    }
+  }
 }
 
 // 触摸结束事件
 function handleTouchEnd(e) {
   e.preventDefault();
-  isTouching = false;
+  virtualJoystick.active = false;
 }
 
 // 开始游戏
